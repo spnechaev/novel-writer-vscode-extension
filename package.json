@@ -8,7 +8,7 @@
     "build": "tsc -p .",
     "watch": "tsc -p . -w",
     "lint": "eslint .",
-    "test": "echo \"No tests yet\""
+    "test": "npm run build && node --require ./test/setupVscodeMock.cjs --test ./test/**/*.test.cjs"
   },
   "keywords": [],
   "repository": {
