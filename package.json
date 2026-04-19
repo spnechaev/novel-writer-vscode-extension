@@ -1,0 +1,81 @@
+{
+  "name": "novelwriter",
+  "displayName": "novelWriter",
+  "version": "1.0.0",
+  "description": "VS Code extension for book authors: characters, plotlines, relationships, chapters/scenes, editorial checklists, and export",
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -p . -w",
+    "lint": "eslint .",
+    "test": "echo \"No tests yet\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": [
+    "onCommand:bookProject.initialize",
+    "onCommand:bookProject.createEntity",
+    "onCommand:bookProject.openBoard",
+    "onCommand:bookProject.openRelationshipGraph",
+    "onCommand:bookProject.exportDocx",
+    "onCommand:bookProject.exportPdf",
+    "workspaceContains:book-project/project.md"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "bookProject.initialize",
+        "title": "novelWriter: Initialize Workspace"
+      },
+      {
+        "command": "bookProject.createEntity",
+        "title": "novelWriter: Create Entity"
+      },
+      {
+        "command": "bookProject.openBoard",
+        "title": "novelWriter: Open Story Board"
+      },
+      {
+        "command": "bookProject.openRelationshipGraph",
+        "title": "novelWriter: Open Relationship Graph"
+      },
+      {
+        "command": "bookProject.exportDocx",
+        "title": "novelWriter: Export to DOCX"
+      },
+      {
+        "command": "bookProject.exportPdf",
+        "title": "novelWriter: Export to PDF"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "bookProject.createEntity",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/pdfkit": "^0.17.6",
+    "@types/vscode": "^1.90.0",
+    "eslint": "^10.2.1",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "docx": "^9.6.1",
+    "gray-matter": "^4.0.3",
+    "markdown-it": "^14.1.1",
+    "pdfkit": "^0.18.0",
+    "vscode-languageclient": "^9.0.1",
+    "yaml": "^2.8.3"
+  }
+}
