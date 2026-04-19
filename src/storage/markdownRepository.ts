@@ -43,6 +43,18 @@ export class MarkdownRepository {
     await this.writeIfMissing(PROJECT_PATHS.schemaVersion, "schemaVersion: 1\n");
 
     await this.writeIfMissing(
+      PROJECT_PATHS.exportTypographyConfig,
+      JSON.stringify(
+        {
+          bodyFontFamily: "Times New Roman",
+          bodyFontSizePt: 12
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    await this.writeIfMissing(
       `${PROJECT_PATHS.editorialTasksDir}/first-pass.md`,
       this.stringify(
         {
@@ -90,8 +102,28 @@ export class MarkdownRepository {
       updatedAt: now
     };
 
-    await this.writeFile(filePath, this.stringify(base, `# ${title}\n\n`));
+    const frontmatter: FrontmatterBase & Record<string, unknown> =
+      type === "scene"
+        ? {
+            ...base,
+            sceneWhat: "TODO: что происходит в сцене",
+            sceneWhy: "TODO: зачем нужна сцена",
+            scenePov: "TODO: чьими глазами",
+            sceneChange: "TODO: что меняется к концу",
+            scenePlotlines: ["основная-линия"]
+          }
+        : { ...base };
+
+    const body = type === "scene" ? this.sceneBodyTemplate(title) : `# ${title}\n\n`;
+
+    await this.writeFile(filePath, this.stringify(frontmatter, body));
     return this.toUri(filePath);
+  }
+
+  private sceneBodyTemplate(title: string): string {
+    return `## Текст сцены
+
+`;
   }
 
   async readIndex(): Promise<BookProjectIndex> {

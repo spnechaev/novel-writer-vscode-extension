@@ -42,17 +42,6 @@ export class LanguageDiagnostics {
         );
       }
 
-      if (line.length > 180) {
-        const range = new vscode.Range(i, 0, i, line.length);
-        diagnostics.push(
-          new vscode.Diagnostic(
-            range,
-            "Long sentence/line can hurt readability.",
-            vscode.DiagnosticSeverity.Information
-          )
-        );
-      }
-
       this.pushFillerDiagnostics(line, i, RU_FILLER_WORDS, diagnostics, "RU filler word");
       this.pushFillerDiagnostics(line, i, EN_FILLER_WORDS, diagnostics, "EN filler word");
     }
@@ -97,4 +86,3 @@ export class LanguageDiagnostics {
     }
   }
 }
-

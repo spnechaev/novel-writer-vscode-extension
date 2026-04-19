@@ -3,6 +3,7 @@ export const BOOK_ROOT = "book-project";
 export const PROJECT_PATHS = {
   project: `${BOOK_ROOT}/project.md`,
   schemaVersion: `${BOOK_ROOT}/.bookmeta/schema-version.md`,
+  exportTypographyConfig: `${BOOK_ROOT}/.bookmeta/export-typography.json`,
   charactersDir: `${BOOK_ROOT}/characters`,
   plotlinesDir: `${BOOK_ROOT}/plotlines`,
   relationshipsDir: `${BOOK_ROOT}/relationships`,
@@ -19,4 +20,3 @@ export type SupportedEntityType =
   | "scene"
   | "editorialTask"
   | "checklist";
-
