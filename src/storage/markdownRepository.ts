@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import matter from "gray-matter";
-import { BookProjectIndex, EntityRecord, EntityType, FrontmatterBase } from "../types";
+import { AnalysisSignalStatus, BookProjectIndex, EntityRecord, EntityType, FrontmatterBase } from "../types";
 import { BOOK_ROOT, PROJECT_PATHS } from "./projectPaths";
 
 const ENTITY_GLOB = "{characters,plotlines,relationships,editorial/tasks,editorial/checklists}/**/*.md";
@@ -160,6 +160,45 @@ export class MarkdownRepository {
     };
   }
 
+  async updateAnalysisSignalStatus(filePath: string, signalKind: string, status: AnalysisSignalStatus): Promise<void> {
+    const relativePath = path.isAbsolute(filePath) ? path.relative(this.workspaceRoot, filePath) : filePath;
+    const uri = this.toUri(relativePath);
+    const raw = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
+    const parsed = matter(raw);
+    const frontmatter = { ...(parsed.data as Record<string, unknown>) };
+    const currentSignals = readAnalysisSignals(frontmatter.analysisSignals);
+
+    if (status === "open") {
+      delete currentSignals[signalKind];
+    } else {
+      currentSignals[signalKind] = status;
+    }
+
+    if (Object.keys(currentSignals).length > 0) {
+      frontmatter.analysisSignals = currentSignals;
+    } else {
+      delete frontmatter.analysisSignals;
+    }
+
+    if (Array.isArray(frontmatter.analysisIgnore)) {
+      const nextIgnore = frontmatter.analysisIgnore
+        .filter((item): item is string => typeof item === "string")
+        .filter((item) => item !== signalKind);
+
+      if (status === "ignored") {
+        nextIgnore.push(signalKind);
+      }
+
+      if (nextIgnore.length > 0) {
+        frontmatter.analysisIgnore = [...new Set(nextIgnore)];
+      } else {
+        delete frontmatter.analysisIgnore;
+      }
+    }
+
+    await this.writeFile(relativePath, this.stringify(frontmatter, parsed.content));
+  }
+
   private getEntityPath(type: EntityType, id: string): string {
     switch (type) {
       case "character":
@@ -224,5 +263,20 @@ function dedupeUris(uris: vscode.Uri[]): vscode.Uri[] {
     seen.add(uri.fsPath);
     result.push(uri);
   }
+  return result;
+}
+
+function readAnalysisSignals(value: unknown): Record<string, AnalysisSignalStatus> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const result: Record<string, AnalysisSignalStatus> = {};
+  for (const [key, rawStatus] of Object.entries(value)) {
+    if (rawStatus === "open" || rawStatus === "ignored" || rawStatus === "resolved" || rawStatus === "deferred") {
+      result[key] = rawStatus;
+    }
+  }
+
   return result;
 }

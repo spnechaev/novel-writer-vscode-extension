@@ -25,6 +25,7 @@
     "onCommand:bookProject.initialize",
     "onCommand:bookProject.createEntity",
     "onCommand:bookProject.openBoard",
+    "onCommand:bookProject.openWritingSignals",
     "onCommand:bookProject.openRelationshipGraph",
     "onCommand:bookProject.exportDocx",
     "onCommand:bookProject.exportPdf",
@@ -43,6 +44,10 @@
       {
         "command": "bookProject.openBoard",
         "title": "novelWriter: Open Story Board"
+      },
+      {
+        "command": "bookProject.openWritingSignals",
+        "title": "novelWriter: Open Writing Signals"
       },
       {
         "command": "bookProject.openRelationshipGraph",

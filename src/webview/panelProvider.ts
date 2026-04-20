@@ -1,6 +1,14 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { ProjectService } from "../domain/projectService";
+import {
+  AnalysisSignal,
+  AnalysisSignalKind,
+  AnalysisSignalSeverity,
+  AnalysisSignalStatus,
+  EditorialPass,
+  ProjectAnalysisResult
+} from "../types";
 
 type BoardCard = {
   id: string;
@@ -35,6 +43,43 @@ type GraphEdge = {
   target: string;
 };
 
+type AnalysisTabId = "forgotten" | "looseEnd" | EditorialPass;
+
+type AnalysisTab = {
+  id: AnalysisTabId;
+  label: string;
+  count: number;
+};
+
+type SignalCard = {
+  id: string;
+  kind: AnalysisSignalKind;
+  group: string;
+  severity: AnalysisSignalSeverity;
+  status: AnalysisSignalStatus;
+  entityId: string;
+  filePath: string;
+  title: string;
+  description: string;
+  suggestedAction: string;
+  passes: EditorialPass[];
+  relatedEntityIds: string[];
+};
+
+type AnalysisViewModel = {
+  generatedAt: string;
+  summary: {
+    entityCount: number;
+    sceneCount: number;
+    signalCount: number;
+    criticalCount: number;
+    warningCount: number;
+    infoCount: number;
+  };
+  tabs: AnalysisTab[];
+  signals: SignalCard[];
+};
+
 export class PanelProvider {
   constructor(private readonly projectService: ProjectService) {}
 
@@ -46,32 +91,24 @@ export class PanelProvider {
       { enableScripts: true }
     );
 
-    panel.webview.onDidReceiveMessage(async (message: { type?: string; filePath?: string }) => {
-      if (message.type !== "openEntity" || typeof message.filePath !== "string" || !message.filePath.trim()) {
-        return;
-      }
-
-      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-      if (!workspaceFolder) {
-        vscode.window.showWarningMessage("Workspace folder not found.");
-        return;
-      }
-
-      const filePath = message.filePath.trim();
-      const targetUri = path.isAbsolute(filePath)
-        ? vscode.Uri.file(filePath)
-        : vscode.Uri.joinPath(workspaceFolder.uri, filePath);
-
-      try {
-        const doc = await vscode.workspace.openTextDocument(targetUri);
-        await vscode.window.showTextDocument(doc, { preview: false });
-      } catch {
-        vscode.window.showWarningMessage(`Cannot open file: ${filePath}`);
-      }
-    });
+    this.bindOpenEntity(panel);
 
     const data = await this.projectService.getIndexJson();
     panel.webview.html = this.renderBoardHtml(data);
+  }
+
+  async openWritingSignals(): Promise<void> {
+    const panel = vscode.window.createWebviewPanel(
+      "bookProjectWritingSignals",
+      "Writing Signals",
+      vscode.ViewColumn.Beside,
+      { enableScripts: true }
+    );
+
+    this.bindOpenEntity(panel);
+
+    const data = await this.projectService.getAnalysisJson();
+    panel.webview.html = this.renderWritingSignalsHtml(data);
   }
 
   async openRelationshipGraph(): Promise<void> {
@@ -82,32 +119,592 @@ export class PanelProvider {
       { enableScripts: true }
     );
 
-    panel.webview.onDidReceiveMessage(async (message: { type?: string; filePath?: string }) => {
-      if (message.type !== "openEntity" || typeof message.filePath !== "string" || !message.filePath.trim()) {
-        return;
-      }
-
-      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-      if (!workspaceFolder) {
-        vscode.window.showWarningMessage("Workspace folder not found.");
-        return;
-      }
-
-      const filePath = message.filePath.trim();
-      const targetUri = path.isAbsolute(filePath)
-        ? vscode.Uri.file(filePath)
-        : vscode.Uri.joinPath(workspaceFolder.uri, filePath);
-
-      try {
-        const doc = await vscode.workspace.openTextDocument(targetUri);
-        await vscode.window.showTextDocument(doc, { preview: false });
-      } catch {
-        vscode.window.showWarningMessage(`Cannot open file: ${filePath}`);
-      }
-    });
+    this.bindOpenEntity(panel);
 
     const data = await this.projectService.getIndexJson();
     panel.webview.html = this.renderGraphHtml(data);
+  }
+
+  private bindOpenEntity(panel: vscode.WebviewPanel): void {
+    panel.webview.onDidReceiveMessage(async (message: { type?: string; filePath?: string; signalId?: string; signalKind?: string; status?: string }) => {
+      if (message.type === "openEntity") {
+        if (typeof message.filePath !== "string" || !message.filePath.trim()) {
+          return;
+        }
+
+        await this.openEntityFile(message.filePath.trim());
+        return;
+      }
+
+      if (message.type === "setSignalStatus") {
+        if (
+          typeof message.filePath !== "string" ||
+          !message.filePath.trim() ||
+          !isAnalysisSignalKind(message.signalKind) ||
+          !isAnalysisSignalStatus(message.status)
+        ) {
+          return;
+        }
+
+        try {
+          await this.projectService.setAnalysisSignalStatus(message.filePath.trim(), message.signalKind, message.status);
+          await panel.webview.postMessage({
+            type: "signalStatusSaved",
+            signalId: typeof message.signalId === "string" ? message.signalId : "",
+            status: message.status
+          });
+        } catch {
+          vscode.window.showWarningMessage("Cannot update signal status.");
+        }
+      }
+    });
+  }
+
+  private async openEntityFile(filePath: string): Promise<void> {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      vscode.window.showWarningMessage("Workspace folder not found.");
+      return;
+    }
+
+    const targetUri = path.isAbsolute(filePath)
+      ? vscode.Uri.file(filePath)
+      : vscode.Uri.joinPath(workspaceFolder.uri, filePath);
+
+    try {
+      const doc = await vscode.workspace.openTextDocument(targetUri);
+      await vscode.window.showTextDocument(doc, { preview: false });
+    } catch {
+      vscode.window.showWarningMessage(`Cannot open file: ${filePath}`);
+    }
+  }
+
+  private renderWritingSignalsHtml(data: string): string {
+    const analysis = this.buildAnalysisViewModel(data);
+    const analysisData = JSON.stringify(analysis);
+
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+
+      body {
+        margin: 0;
+        padding: 16px;
+        font-family: var(--vscode-font-family);
+        color: var(--vscode-editor-foreground);
+        background: var(--vscode-editor-background);
+      }
+
+      .header {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .title {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .subtitle {
+        margin: 4px 0 0 0;
+        font-size: 12px;
+        opacity: 0.78;
+      }
+
+      .stats,
+      .tabs,
+      .filters,
+      .status-filters,
+      .passes {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .pill,
+      .tab-btn,
+      .filter-btn,
+      .pass {
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 12px;
+      }
+
+      .tab-btn,
+      .filter-btn {
+        background: color-mix(in srgb, var(--vscode-editor-background) 88%, var(--vscode-editor-foreground) 12%);
+        color: inherit;
+        cursor: pointer;
+      }
+
+      .tab-btn.active,
+      .filter-btn.active {
+        border-color: var(--vscode-focusBorder);
+        background: color-mix(in srgb, var(--vscode-button-background, var(--vscode-focusBorder)) 78%, var(--vscode-editor-background) 22%);
+      }
+
+      .toolbar {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .toolbar-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .toolbar-label {
+        font-size: 12px;
+        opacity: 0.78;
+      }
+
+      .cards {
+        display: grid;
+        gap: 12px;
+      }
+
+      .card {
+        border: 1px solid var(--vscode-panel-border);
+        border-left-width: 4px;
+        border-radius: 10px;
+        padding: 12px;
+        background: color-mix(in srgb, var(--vscode-editor-background) 90%, var(--vscode-editor-foreground) 10%);
+      }
+
+      .card.critical {
+        border-left-color: #ff6b6b;
+      }
+
+      .card.warning {
+        border-left-color: #f4d35e;
+      }
+
+      .card.info {
+        border-left-color: #4cc2ff;
+      }
+
+      .card-top,
+      .card-meta,
+      .card-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .card-top {
+        justify-content: space-between;
+      }
+
+      .card-title {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .card-text,
+      .card-action-text {
+        margin: 10px 0 0 0;
+        font-size: 12px;
+        line-height: 1.5;
+        opacity: 0.92;
+      }
+
+      .card-action-text {
+        opacity: 0.86;
+      }
+
+      .file {
+        font-size: 11px;
+        opacity: 0.75;
+      }
+
+      .badge {
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 11px;
+        border: 1px solid var(--vscode-panel-border);
+      }
+
+      .badge.group-forgotten {
+        background: color-mix(in srgb, #ffcc66 18%, transparent);
+      }
+
+      .badge.group-looseEnd {
+        background: color-mix(in srgb, #ff8fab 18%, transparent);
+      }
+
+      .open-btn {
+        margin-top: 10px;
+        border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
+        background: var(--vscode-button-background, color-mix(in srgb, var(--vscode-editor-background) 82%, var(--vscode-editor-foreground) 18%));
+        color: var(--vscode-button-foreground, var(--vscode-editor-foreground));
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .open-btn:hover {
+        background: var(--vscode-button-hoverBackground, color-mix(in srgb, var(--vscode-editor-background) 72%, var(--vscode-editor-foreground) 28%));
+      }
+
+      .status-btn {
+        border: 1px solid var(--vscode-panel-border);
+        background: transparent;
+        color: inherit;
+        border-radius: 6px;
+        padding: 5px 8px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+
+      .status-btn.active {
+        border-color: var(--vscode-focusBorder);
+        background: color-mix(in srgb, var(--vscode-focusBorder) 18%, transparent);
+      }
+
+      .empty {
+        padding: 18px 14px;
+        border: 1px dashed var(--vscode-panel-border);
+        border-radius: 10px;
+        font-size: 13px;
+        opacity: 0.75;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="header">
+      <div>
+        <h2 class="title">Writing Signals</h2>
+        <p class="subtitle">Один экран, где видно, что забыто, что висит хвостом и в какой редакторский проход лучше влезть прямо сейчас.</p>
+      </div>
+      <div class="stats">
+        <span class="pill">Сущностей: ${analysis.summary.entityCount}</span>
+        <span class="pill">Сцен: ${analysis.summary.sceneCount}</span>
+        <span class="pill">Сигналов: ${analysis.summary.signalCount}</span>
+        <span class="pill">Критичных: ${analysis.summary.criticalCount}</span>
+        <span class="pill">Предупреждений: ${analysis.summary.warningCount}</span>
+      </div>
+    </section>
+
+    <section class="toolbar">
+      <div id="tabs" class="tabs"></div>
+      <div class="toolbar-row">
+        <span class="toolbar-label">Серьёзность</span>
+        <div id="filters" class="filters"></div>
+      </div>
+      <div class="toolbar-row">
+        <span class="toolbar-label">Статус сигнала</span>
+        <div id="statusFilters" class="status-filters"></div>
+      </div>
+    </section>
+
+    <section id="cards" class="cards"></section>
+    <section id="empty" class="empty" hidden>Для выбранного режима сигналов пока нет. Редкий случай: либо вы всё подчистили, либо текст ещё не успел наделать долгов.</section>
+
+    <script>
+      const vscode = acquireVsCodeApi();
+      const analysis = ${analysisData};
+      let activeTab = 'forgotten';
+      let activeSeverity = 'all';
+      let activeStatus = 'open';
+
+      const cardsEl = document.getElementById('cards');
+      const emptyEl = document.getElementById('empty');
+      const tabsEl = document.getElementById('tabs');
+      const filtersEl = document.getElementById('filters');
+      const statusFiltersEl = document.getElementById('statusFilters');
+
+      renderTabs();
+      renderFilters();
+      renderStatusFilters();
+      renderCards();
+
+      window.addEventListener('message', (event) => {
+        const message = event.data || {};
+        if (message.type !== 'signalStatusSaved') {
+          return;
+        }
+
+        const signal = analysis.signals.find((item) => item.id === message.signalId);
+        if (!signal) {
+          return;
+        }
+
+        signal.status = message.status;
+        renderCards();
+      });
+
+      function renderTabs() {
+        tabsEl.innerHTML = analysis.tabs
+          .map((tab) => {
+            const active = tab.id === activeTab ? 'active' : '';
+            return '<button class="tab-btn ' + active + '" type="button" data-tab="' + tab.id + '">' + escapeHtml(tab.label) + ' (' + tab.count + ')</button>';
+          })
+          .join('');
+
+        tabsEl.querySelectorAll('[data-tab]').forEach((button) => {
+          button.addEventListener('click', () => {
+            activeTab = button.getAttribute('data-tab') || 'forgotten';
+            renderTabs();
+            renderCards();
+          });
+        });
+      }
+
+      function renderFilters() {
+        const filters = [
+          { id: 'all', label: 'Все' },
+          { id: 'critical', label: 'Критично' },
+          { id: 'warning', label: 'Предупреждения' },
+          { id: 'info', label: 'Инфо' }
+        ];
+
+        filtersEl.innerHTML = filters
+          .map((filter) => {
+            const active = filter.id === activeSeverity ? 'active' : '';
+            return '<button class="filter-btn ' + active + '" type="button" data-severity="' + filter.id + '">' + escapeHtml(filter.label) + '</button>';
+          })
+          .join('');
+
+        filtersEl.querySelectorAll('[data-severity]').forEach((button) => {
+          button.addEventListener('click', () => {
+            activeSeverity = button.getAttribute('data-severity') || 'all';
+            renderFilters();
+            renderCards();
+          });
+        });
+      }
+
+      function renderStatusFilters() {
+        const filters = [
+          { id: 'open', label: 'Открытые' },
+          { id: 'deferred', label: 'Отложенные' },
+          { id: 'resolved', label: 'Закрытые' },
+          { id: 'ignored', label: 'Игнор' },
+          { id: 'all', label: 'Все статусы' }
+        ];
+
+        statusFiltersEl.innerHTML = filters
+          .map((filter) => {
+            const active = filter.id === activeStatus ? 'active' : '';
+            return '<button class="filter-btn ' + active + '" type="button" data-status-filter="' + filter.id + '">' + escapeHtml(filter.label) + '</button>';
+          })
+          .join('');
+
+        statusFiltersEl.querySelectorAll('[data-status-filter]').forEach((button) => {
+          button.addEventListener('click', () => {
+            activeStatus = button.getAttribute('data-status-filter') || 'open';
+            renderStatusFilters();
+            renderCards();
+          });
+        });
+      }
+
+      function renderCards() {
+        const visibleSignals = analysis.signals.filter((signal) => matchesTab(signal) && matchesSeverity(signal) && matchesStatus(signal));
+
+        if (!visibleSignals.length) {
+          cardsEl.innerHTML = '';
+          emptyEl.hidden = false;
+          return;
+        }
+
+        emptyEl.hidden = true;
+        cardsEl.innerHTML = visibleSignals
+          .map((signal) => {
+            const passes = (signal.passes || []).map((pass) => '<span class="pass">' + escapeHtml(renderPassLabel(pass)) + '</span>').join('');
+            const encodedPath = encodeURIComponent(String(signal.filePath || ''));
+            return (
+              '<article class="card ' + escapeHtml(signal.severity) + '">' +
+                '<div class="card-top">' +
+                  '<h3 class="card-title">' + escapeHtml(signal.title) + '</h3>' +
+                  '<span class="badge group-' + escapeHtml(signal.group) + '">' + escapeHtml(renderGroupLabel(signal.group)) + '</span>' +
+                '</div>' +
+                '<div class="card-meta">' +
+                  '<span class="badge">' + escapeHtml(renderSeverityLabel(signal.severity)) + '</span>' +
+                  '<span class="badge">Статус: ' + escapeHtml(signal.status) + '</span>' +
+                  passes +
+                '</div>' +
+                '<p class="card-text">' + escapeHtml(signal.description) + '</p>' +
+                '<p class="card-action-text">Что сделать: ' + escapeHtml(signal.suggestedAction) + '</p>' +
+                '<div class="file">' + escapeHtml(signal.filePath) + '</div>' +
+                '<div class="card-actions">' +
+                  '<button class="open-btn" type="button" data-file-path="' + encodedPath + '">Открыть файл</button>' +
+                  renderStatusButtons(signal) +
+                '</div>' +
+              '</article>'
+            );
+          })
+          .join('');
+
+        cardsEl.querySelectorAll('[data-file-path]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const filePath = decodeURIComponent(button.getAttribute('data-file-path') || '');
+            if (!filePath) {
+              return;
+            }
+            vscode.postMessage({ type: 'openEntity', filePath });
+          });
+        });
+
+        cardsEl.querySelectorAll('[data-signal-status]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const signalId = button.getAttribute('data-signal-id') || '';
+            const signalStatus = button.getAttribute('data-signal-status') || 'open';
+            const signal = analysis.signals.find((item) => item.id === signalId);
+            if (!signal) {
+              return;
+            }
+
+            signal.status = signalStatus;
+            vscode.postMessage({
+              type: 'setSignalStatus',
+              signalId: signal.id,
+              filePath: signal.filePath,
+              signalKind: signal.kind,
+              status: signalStatus
+            });
+            renderCards();
+          });
+        });
+      }
+
+      function matchesTab(signal) {
+        if (activeTab === 'forgotten') {
+          return signal.group === 'forgotten';
+        }
+        if (activeTab === 'looseEnd') {
+          return signal.group === 'looseEnd';
+        }
+        return Array.isArray(signal.passes) && signal.passes.includes(activeTab);
+      }
+
+      function matchesSeverity(signal) {
+        return activeSeverity === 'all' ? true : signal.severity === activeSeverity;
+      }
+
+      function matchesStatus(signal) {
+        return activeStatus === 'all' ? true : signal.status === activeStatus;
+      }
+
+      function renderStatusButtons(signal) {
+        const statuses = [
+          { id: 'open', label: 'Открыт' },
+          { id: 'deferred', label: 'Отложить' },
+          { id: 'resolved', label: 'Закрыть' },
+          { id: 'ignored', label: 'Игнор' }
+        ];
+
+        return statuses
+          .map((status) => {
+            const active = signal.status === status.id ? 'active' : '';
+            return '<button class="status-btn ' + active + '" type="button" data-signal-id="' + escapeHtml(signal.id) + '" data-signal-status="' + status.id + '">' + escapeHtml(status.label) + '</button>';
+          })
+          .join('');
+      }
+
+      function renderGroupLabel(group) {
+        if (group === 'forgotten') {
+          return 'Забытое';
+        }
+        if (group === 'looseEnd') {
+          return 'Хвост';
+        }
+        return group;
+      }
+
+      function renderPassLabel(pass) {
+        if (pass === 'logic') {
+          return 'Логика';
+        }
+        if (pass === 'rhythm') {
+          return 'Ритм';
+        }
+        if (pass === 'style') {
+          return 'Стиль';
+        }
+        return pass;
+      }
+
+      function renderSeverityLabel(severity) {
+        if (severity === 'critical') {
+          return 'Критично';
+        }
+        if (severity === 'warning') {
+          return 'Предупреждение';
+        }
+        return 'Инфо';
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;');
+      }
+    </script>
+  </body>
+</html>`;
+  }
+
+  private buildAnalysisViewModel(data: string): AnalysisViewModel {
+    try {
+      const parsed = JSON.parse(data) as Partial<ProjectAnalysisResult>;
+      const signals = Array.isArray(parsed.signals) ? parsed.signals.map((signal) => normalizeSignalCard(signal)) : [];
+
+      return {
+        generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : "",
+        summary: {
+          entityCount: typeof parsed.summary?.entityCount === "number" ? parsed.summary.entityCount : 0,
+          sceneCount: typeof parsed.summary?.sceneCount === "number" ? parsed.summary.sceneCount : 0,
+          signalCount: typeof parsed.summary?.signalCount === "number" ? parsed.summary.signalCount : signals.length,
+          criticalCount: typeof parsed.summary?.criticalCount === "number" ? parsed.summary.criticalCount : signals.filter((signal) => signal.severity === "critical").length,
+          warningCount: typeof parsed.summary?.warningCount === "number" ? parsed.summary.warningCount : signals.filter((signal) => signal.severity === "warning").length,
+          infoCount: typeof parsed.summary?.infoCount === "number" ? parsed.summary.infoCount : signals.filter((signal) => signal.severity === "info").length
+        },
+        tabs: [
+          { id: "forgotten", label: "Что забыто", count: countSignals(signals, "forgotten") },
+          { id: "looseEnd", label: "Незакрытые хвосты", count: countSignals(signals, "looseEnd") },
+          { id: "logic", label: "Проход: логика", count: countSignalsByPass(signals, "logic") },
+          { id: "rhythm", label: "Проход: ритм", count: countSignalsByPass(signals, "rhythm") },
+          { id: "style", label: "Проход: стиль", count: countSignalsByPass(signals, "style") }
+        ],
+        signals
+      };
+    } catch {
+      return {
+        generatedAt: "",
+        summary: {
+          entityCount: 0,
+          sceneCount: 0,
+          signalCount: 0,
+          criticalCount: 0,
+          warningCount: 0,
+          infoCount: 0
+        },
+        tabs: [
+          { id: "forgotten", label: "Что забыто", count: 0 },
+          { id: "looseEnd", label: "Незакрытые хвосты", count: 0 },
+          { id: "logic", label: "Проход: логика", count: 0 },
+          { id: "rhythm", label: "Проход: ритм", count: 0 },
+          { id: "style", label: "Проход: стиль", count: 0 }
+        ],
+        signals: []
+      };
+    }
   }
 
   private renderBoardHtml(data: string): string {
@@ -1254,4 +1851,56 @@ function readStringArray(value: unknown): string[] {
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function normalizeSignalCard(signal: Partial<AnalysisSignal>): SignalCard {
+  const severity = signal.severity === "critical" || signal.severity === "warning" || signal.severity === "info"
+    ? signal.severity
+    : "info";
+  const status = signal.status === "ignored" || signal.status === "resolved" || signal.status === "deferred" || signal.status === "open"
+    ? signal.status
+    : "open";
+
+  return {
+    id: typeof signal.id === "string" ? signal.id : "unknown-signal",
+    kind: isAnalysisSignalKind(signal.kind) ? signal.kind : "scene-without-links",
+    group: typeof signal.group === "string" ? signal.group : "forgotten",
+    severity,
+    status,
+    entityId: typeof signal.entityId === "string" ? signal.entityId : "unknown-entity",
+    filePath: typeof signal.filePath === "string" ? signal.filePath : "",
+    title: typeof signal.title === "string" ? signal.title : "Сигнал без заголовка",
+    description: typeof signal.description === "string" ? signal.description : "",
+    suggestedAction: typeof signal.suggestedAction === "string" ? signal.suggestedAction : "",
+    passes: Array.isArray(signal.passes)
+      ? signal.passes.filter((pass): pass is EditorialPass => pass === "logic" || pass === "rhythm" || pass === "style")
+      : [],
+    relatedEntityIds: Array.isArray(signal.relatedEntityIds)
+      ? signal.relatedEntityIds.filter((id): id is string => typeof id === "string")
+      : []
+  };
+}
+
+function countSignals(signals: SignalCard[], group: string): number {
+  return signals.filter((signal) => signal.group === group).length;
+}
+
+function countSignalsByPass(signals: SignalCard[], pass: EditorialPass): number {
+  return signals.filter((signal) => signal.passes.includes(pass)).length;
+}
+
+function isAnalysisSignalStatus(value: string | undefined): value is AnalysisSignalStatus {
+  return value === "open" || value === "ignored" || value === "resolved" || value === "deferred";
+}
+
+function isAnalysisSignalKind(value: unknown): value is AnalysisSignalKind {
+  return value === "missing-scene-purpose"
+    || value === "missing-scene-change"
+    || value === "missing-scene-pov"
+    || value === "missing-scene-plotlines"
+    || value === "scene-without-links"
+    || value === "plotline-without-progression"
+    || value === "entity-without-mentions"
+    || value === "open-editorial-task-without-links"
+    || value === "open-relationship-without-links";
 }

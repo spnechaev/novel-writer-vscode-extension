@@ -1,9 +1,13 @@
 import * as vscode from "vscode";
+import { ProjectAnalysis } from "./projectAnalysis";
 import { MarkdownRepository } from "../storage/markdownRepository";
-import { EntityType } from "../types";
+import { AnalysisSignalKind, AnalysisSignalStatus, EntityType } from "../types";
 
 export class ProjectService {
-  constructor(private readonly repository: MarkdownRepository) {}
+  constructor(
+    private readonly repository: MarkdownRepository,
+    private readonly analysis = new ProjectAnalysis()
+  ) {}
 
   async initializeWorkspace(): Promise<void> {
     await this.repository.initializeProject();
@@ -46,5 +50,19 @@ export class ProjectService {
   async getIndexJson(): Promise<string> {
     const index = await this.repository.readIndex();
     return JSON.stringify(index, null, 2);
+  }
+
+  async getAnalysis() {
+    const index = await this.repository.readIndex();
+    return this.analysis.analyze(index);
+  }
+
+  async getAnalysisJson(): Promise<string> {
+    const analysis = await this.getAnalysis();
+    return JSON.stringify(analysis, null, 2);
+  }
+
+  async setAnalysisSignalStatus(filePath: string, signalKind: AnalysisSignalKind, status: AnalysisSignalStatus): Promise<void> {
+    await this.repository.updateAnalysisSignalStatus(filePath, signalKind, status);
   }
 }

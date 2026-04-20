@@ -6,7 +6,7 @@ novelWriter helps authors manage a book project inside VS Code using Markdown fi
 
 - Initialize a ready-to-use book workspace.
 - Create entities (character, plotline, relationship, chapter, scene, editorial task, checklist).
-- Open **Story Board** and **Relationship Graph** panels.
+- Open **Story Board**, **Writing Signals**, and **Relationship Graph** panels.
 - Export manuscript to DOCX and PDF.
 - Run language/style diagnostics for Markdown content.
 
@@ -51,12 +51,70 @@ Open a folder in VS Code, then run commands from Command Palette (`Cmd+Shift+P`)
 - `novelWriter: Open Story Board`
   - Opens a panel with chapter/scene lanes.
   - Shows scene service metadata on cards and highlights missing fields.
+- `novelWriter: Open Writing Signals`
+  - Opens an analysis panel for missed details, loose ends, and focused editorial passes.
+  - Includes tabs for forgotten details, loose ends, and passes: logic, rhythm, style.
+  - Lets you filter signals by severity and status.
+  - Supports opening the source file directly from a signal card.
+  - Supports marking a signal as `open`, `deferred`, `resolved`, or `ignored`.
 - `novelWriter: Open Relationship Graph`
   - Opens relationship graph data view.
 - `novelWriter: Export to DOCX`
   - Writes `book-project/exports/manuscript.docx`.
 - `novelWriter: Export to PDF`
   - Writes `book-project/exports/manuscript.pdf`.
+
+## Analysis signals and lightweight workflow
+
+The extension now builds a lightweight analysis layer on top of project Markdown data.
+
+### Scene fields used by analysis
+
+For `scene` entities, the first version of the analyzer relies on these frontmatter fields:
+
+- `sceneWhy`
+- `sceneChange`
+- `scenePov`
+- `scenePlotlines`
+- `refs`
+- `status`
+
+### Current signal types
+
+The first version detects signals such as:
+
+- missing scene purpose;
+- missing scene change;
+- missing POV;
+- missing plotline links;
+- scene without meaningful links;
+- plotline without progression;
+- entity created but never mentioned;
+- editorial task without links;
+- relationship not integrated into the project.
+
+### Persisted signal statuses
+
+Signal state is stored in frontmatter so the author does not have to fight the same warnings forever.
+
+- `analysisIgnore` — hide specific signal kinds entirely for an entity.
+- `analysisSignals` — persist signal status per kind:
+  - `open`
+  - `deferred`
+  - `resolved`
+  - `ignored`
+
+Example:
+
+```yaml
+analysisIgnore:
+  - missing-scene-plotlines
+analysisSignals:
+  missing-scene-purpose: deferred
+  missing-scene-change: resolved
+```
+
+This keeps the workflow practical: the extension points at structural trouble, and the author decides whether it is a real problem or just another beautiful false alarm in human form.
 
 ## Project structure generated after initialization
 

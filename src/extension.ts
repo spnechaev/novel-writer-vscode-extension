@@ -35,6 +35,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("bookProject.openBoard", async () => {
       await panelProvider.openBoard();
     }),
+    vscode.commands.registerCommand("bookProject.openWritingSignals", async () => {
+      await panelProvider.openWritingSignals();
+    }),
     vscode.commands.registerCommand("bookProject.openRelationshipGraph", async () => {
       await panelProvider.openRelationshipGraph();
     }),
@@ -69,4 +72,3 @@ async function openProjectReadme(workspaceRoot: string): Promise<void> {
   const doc = await vscode.workspace.openTextDocument(uri);
   await vscode.window.showTextDocument(doc, { preview: false });
 }
-
