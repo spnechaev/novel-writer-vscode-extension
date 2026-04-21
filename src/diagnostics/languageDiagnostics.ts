@@ -3,6 +3,19 @@ import * as vscode from "vscode";
 const RU_FILLER_WORDS = ["очень", "как бы", "в общем"];
 const EN_FILLER_WORDS = ["very", "really", "just"];
 
+export type LanguageDiagnosticKind = "space-before-punctuation" | "filler-word" | "repeated-punctuation";
+
+export type LanguageDiagnosticSeverity = "info" | "warning";
+
+export interface LanguageDiagnosticHint {
+  kind: LanguageDiagnosticKind;
+  severity: LanguageDiagnosticSeverity;
+  message: string;
+  start: number;
+  end: number;
+  match: string;
+}
+
 export class LanguageDiagnostics {
   private readonly collection = vscode.languages.createDiagnosticCollection("bookProject");
 
@@ -23,66 +36,85 @@ export class LanguageDiagnostics {
       return;
     }
 
-    const diagnostics: vscode.Diagnostic[] = [];
-    const text = document.getText();
-    const lines = text.split(/\r?\n/g);
-
-    for (let i = 0; i < lines.length; i += 1) {
-      const line = lines[i] ?? "";
-
-      if (/\s[,.!?;:]/.test(line)) {
-        const idx = line.search(/\s[,.!?;:]/);
-        const range = new vscode.Range(i, Math.max(0, idx), i, Math.max(0, idx + 2));
-        diagnostics.push(
-          new vscode.Diagnostic(
-            range,
-            "Remove space before punctuation.",
-            vscode.DiagnosticSeverity.Warning
-          )
-        );
-      }
-
-      this.pushFillerDiagnostics(line, i, RU_FILLER_WORDS, diagnostics, "RU filler word");
-      this.pushFillerDiagnostics(line, i, EN_FILLER_WORDS, diagnostics, "EN filler word");
-    }
-
-    const repeatedPunctuation = /([!?.,])\1{2,}/g;
-    let match: RegExpExecArray | null;
-    while ((match = repeatedPunctuation.exec(text)) !== null) {
-      const start = document.positionAt(match.index);
-      const end = document.positionAt(match.index + match[0].length);
-      diagnostics.push(
-        new vscode.Diagnostic(
-          new vscode.Range(start, end),
-          "Repeated punctuation detected.",
-          vscode.DiagnosticSeverity.Warning
-        )
+    const diagnostics = analyzeMarkdownText(document.getText()).map((hint) => {
+      const start = document.positionAt(hint.start);
+      const end = document.positionAt(hint.end);
+      return new vscode.Diagnostic(
+        new vscode.Range(start, end),
+        hint.message,
+        hint.severity === "warning" ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Information
       );
-    }
+    });
 
     this.collection.set(document.uri, diagnostics);
   }
+}
 
-  private pushFillerDiagnostics(
-    line: string,
-    lineIndex: number,
-    fillers: string[],
-    out: vscode.Diagnostic[],
-    label: string
-  ): void {
-    const lower = line.toLowerCase();
-    for (const filler of fillers) {
-      const idx = lower.indexOf(filler);
-      if (idx >= 0) {
-        const range = new vscode.Range(lineIndex, idx, lineIndex, idx + filler.length);
-        out.push(
-          new vscode.Diagnostic(
-            range,
-            `${label}: "${filler}" may weaken style in this sentence.`,
-            vscode.DiagnosticSeverity.Information
-          )
-        );
+export function analyzeMarkdownText(text: string): LanguageDiagnosticHint[] {
+  const hints: LanguageDiagnosticHint[] = [];
+  const lines = text.split(/\r?\n/g);
+  let offset = 0;
+
+  for (const line of lines) {
+    const spaceBeforePunctuation = /\s[,.!?;:]/g;
+    let spacingMatch: RegExpExecArray | null;
+    while ((spacingMatch = spaceBeforePunctuation.exec(line)) !== null) {
+      hints.push({
+        kind: "space-before-punctuation",
+        severity: "warning",
+        message: "Remove space before punctuation.",
+        start: offset + spacingMatch.index,
+        end: offset + spacingMatch.index + spacingMatch[0].length,
+        match: spacingMatch[0]
+      });
+    }
+
+    pushFillerHints(line, offset, RU_FILLER_WORDS, hints, "RU filler word");
+    pushFillerHints(line, offset, EN_FILLER_WORDS, hints, "EN filler word");
+    offset += line.length + 1;
+  }
+
+  const repeatedPunctuation = /([!?.,])\1{2,}/g;
+  let punctuationMatch: RegExpExecArray | null;
+  while ((punctuationMatch = repeatedPunctuation.exec(text)) !== null) {
+    hints.push({
+      kind: "repeated-punctuation",
+      severity: "warning",
+      message: "Repeated punctuation detected.",
+      start: punctuationMatch.index,
+      end: punctuationMatch.index + punctuationMatch[0].length,
+      match: punctuationMatch[0]
+    });
+  }
+
+  return hints;
+}
+
+function pushFillerHints(
+  line: string,
+  lineOffset: number,
+  fillers: string[],
+  out: LanguageDiagnosticHint[],
+  label: string
+): void {
+  const lower = line.toLowerCase();
+  for (const filler of fillers) {
+    let fromIndex = 0;
+    while (fromIndex < lower.length) {
+      const idx = lower.indexOf(filler, fromIndex);
+      if (idx < 0) {
+        break;
       }
+
+      out.push({
+        kind: "filler-word",
+        severity: "info",
+        message: `${label}: "${filler}" may weaken style in this sentence.`,
+        start: lineOffset + idx,
+        end: lineOffset + idx + filler.length,
+        match: filler
+      });
+      fromIndex = idx + filler.length;
     }
   }
 }

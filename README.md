@@ -53,7 +53,7 @@ Open a folder in VS Code, then run commands from Command Palette (`Cmd+Shift+P`)
   - Shows scene service metadata on cards and highlights missing fields.
 - `novelWriter: Open Writing Signals`
   - Opens an analysis panel for missed details, loose ends, and focused editorial passes.
-  - Includes tabs for forgotten details, loose ends, and passes: logic, rhythm, style.
+  - Includes tabs for forgotten details, loose ends, and passes: logic, rhythm, style, texture, repetition.
   - Lets you filter signals by severity and status.
   - Supports opening the source file directly from a signal card.
   - Supports marking a signal as `open`, `deferred`, `resolved`, or `ignored`.
@@ -88,10 +88,29 @@ The first version detects signals such as:
 - missing POV;
 - missing plotline links;
 - scene without meaningful links;
+- scene with low texture/material density;
+- scene monotony when the same POV goes on for too long;
+- repetition clusters inside a scene;
+- dropped characters that disappear from recent scenes;
 - plotline without progression;
 - entity created but never mentioned;
+- style filler-word clusters;
+- repeated punctuation clusters;
+- spaces before punctuation;
 - editorial task without links;
 - relationship not integrated into the project.
+
+### Style integration
+
+The analyzer now reuses lightweight language checks from [`LanguageDiagnostics`](src/diagnostics/languageDiagnostics.ts:6) through [`analyzeMarkdownText()`](src/diagnostics/languageDiagnostics.ts:43).
+
+That means the `style` pass in **Writing Signals** can surface:
+
+- filler words;
+- repeated punctuation;
+- spacing before punctuation.
+
+This keeps the style pass tied to real text diagnostics instead of inventing a second competing system, because one bureaucratic hydra is already more than enough.
 
 ### Persisted signal statuses
 

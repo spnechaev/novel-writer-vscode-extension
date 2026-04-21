@@ -7,7 +7,7 @@ export type EntityType =
   | "editorialTask"
   | "checklist";
 
-export type EditorialPass = "logic" | "rhythm" | "style";
+export type EditorialPass = "logic" | "rhythm" | "style" | "texture" | "repetition";
 
 export type AnalysisSignalGroup = "forgotten" | "looseEnd" | "focusPass";
 
@@ -21,8 +21,15 @@ export type AnalysisSignalKind =
   | "missing-scene-pov"
   | "missing-scene-plotlines"
   | "scene-without-links"
+  | "scene-low-texture"
+  | "scene-monotony"
+  | "scene-repetition-cluster"
+  | "character-dropped-from-scenes"
   | "plotline-without-progression"
   | "entity-without-mentions"
+  | "style-filler-words"
+  | "style-space-before-punctuation"
+  | "style-repeated-punctuation"
   | "open-editorial-task-without-links"
   | "open-relationship-without-links";
 

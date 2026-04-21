@@ -4,81 +4,17 @@ import { ProjectService } from "../domain/projectService";
 import {
   AnalysisSignal,
   AnalysisSignalKind,
-  AnalysisSignalSeverity,
-  AnalysisSignalStatus,
   EditorialPass,
   ProjectAnalysisResult
 } from "../types";
-
-type BoardCard = {
-  id: string;
-  title: string;
-  type: string;
-  status: string;
-  filePath: string;
-  tags: string[];
-  sceneMeta?: SceneMeta;
-  missingSceneFields?: string[];
-};
-
-type SceneMeta = {
-  what: string;
-  why: string;
-  pov: string;
-  change: string;
-  plotlines: string[];
-};
-
-type GraphNode = {
-  id: string;
-  title: string;
-  type: string;
-  status: string;
-  filePath: string;
-  refs: string[];
-};
-
-type GraphEdge = {
-  source: string;
-  target: string;
-};
-
-type AnalysisTabId = "forgotten" | "looseEnd" | EditorialPass;
-
-type AnalysisTab = {
-  id: AnalysisTabId;
-  label: string;
-  count: number;
-};
-
-type SignalCard = {
-  id: string;
-  kind: AnalysisSignalKind;
-  group: string;
-  severity: AnalysisSignalSeverity;
-  status: AnalysisSignalStatus;
-  entityId: string;
-  filePath: string;
-  title: string;
-  description: string;
-  suggestedAction: string;
-  passes: EditorialPass[];
-  relatedEntityIds: string[];
-};
-
-type AnalysisViewModel = {
-  generatedAt: string;
-  summary: {
-    entityCount: number;
-    sceneCount: number;
-    signalCount: number;
-    criticalCount: number;
-    warningCount: number;
-    infoCount: number;
-  };
-  tabs: AnalysisTab[];
-  signals: SignalCard[];
-};
+import { normalizeSignalCard, countSignals, countSignalsByPass, isAnalysisSignalKind, isAnalysisSignalStatus } from "./analysis/analysisHelpers";
+import { buildAnalysisViewModel } from "./analysis/buildAnalysisViewModel";
+import { AnalysisTabId, AnalysisViewModel, SignalCard } from "./analysis/analysisViewTypes";
+import { BoardCard } from "./board/boardTypes";
+import { buildRelationshipGraphData } from "./graph/buildRelationshipGraphData";
+import { GraphEdge, GraphNode } from "./graph/graphTypes";
+import { escapeHtml, normalizeStatus } from "./shared/html";
+import { extractSceneMeta, getMissingSceneFields, SceneMeta } from "./shared/sceneMeta";
 
 export class PanelProvider {
   constructor(private readonly projectService: ProjectService) {}
@@ -635,6 +571,12 @@ export class PanelProvider {
         if (pass === 'style') {
           return 'Стиль';
         }
+        if (pass === 'texture') {
+          return 'Фактура';
+        }
+        if (pass === 'repetition') {
+          return 'Повторы';
+        }
         return pass;
       }
 
@@ -661,50 +603,7 @@ export class PanelProvider {
   }
 
   private buildAnalysisViewModel(data: string): AnalysisViewModel {
-    try {
-      const parsed = JSON.parse(data) as Partial<ProjectAnalysisResult>;
-      const signals = Array.isArray(parsed.signals) ? parsed.signals.map((signal) => normalizeSignalCard(signal)) : [];
-
-      return {
-        generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : "",
-        summary: {
-          entityCount: typeof parsed.summary?.entityCount === "number" ? parsed.summary.entityCount : 0,
-          sceneCount: typeof parsed.summary?.sceneCount === "number" ? parsed.summary.sceneCount : 0,
-          signalCount: typeof parsed.summary?.signalCount === "number" ? parsed.summary.signalCount : signals.length,
-          criticalCount: typeof parsed.summary?.criticalCount === "number" ? parsed.summary.criticalCount : signals.filter((signal) => signal.severity === "critical").length,
-          warningCount: typeof parsed.summary?.warningCount === "number" ? parsed.summary.warningCount : signals.filter((signal) => signal.severity === "warning").length,
-          infoCount: typeof parsed.summary?.infoCount === "number" ? parsed.summary.infoCount : signals.filter((signal) => signal.severity === "info").length
-        },
-        tabs: [
-          { id: "forgotten", label: "Что забыто", count: countSignals(signals, "forgotten") },
-          { id: "looseEnd", label: "Незакрытые хвосты", count: countSignals(signals, "looseEnd") },
-          { id: "logic", label: "Проход: логика", count: countSignalsByPass(signals, "logic") },
-          { id: "rhythm", label: "Проход: ритм", count: countSignalsByPass(signals, "rhythm") },
-          { id: "style", label: "Проход: стиль", count: countSignalsByPass(signals, "style") }
-        ],
-        signals
-      };
-    } catch {
-      return {
-        generatedAt: "",
-        summary: {
-          entityCount: 0,
-          sceneCount: 0,
-          signalCount: 0,
-          criticalCount: 0,
-          warningCount: 0,
-          infoCount: 0
-        },
-        tabs: [
-          { id: "forgotten", label: "Что забыто", count: 0 },
-          { id: "looseEnd", label: "Незакрытые хвосты", count: 0 },
-          { id: "logic", label: "Проход: логика", count: 0 },
-          { id: "rhythm", label: "Проход: ритм", count: 0 },
-          { id: "style", label: "Проход: стиль", count: 0 }
-        ],
-        signals: []
-      };
-    }
+    return buildAnalysisViewModel(data);
   }
 
   private renderBoardHtml(data: string): string {
@@ -753,6 +652,13 @@ export class PanelProvider {
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
+      }
+
+      .edge-details {
+        margin: 10px 0 0 0;
+        min-height: 18px;
+        font-size: 12px;
+        opacity: 0.78;
       }
 
       .controls {
@@ -1251,11 +1157,43 @@ export class PanelProvider {
         opacity: 0.9;
       }
 
+      .edge-details {
+        margin-top: 8px;
+        font-size: 12px;
+        line-height: 1.4;
+        opacity: 0.78;
+        max-width: 780px;
+      }
+
+      .controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .tool-btn {
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--vscode-button-background) 22%, var(--vscode-editor-background) 78%);
+        color: var(--vscode-editor-foreground);
+        min-width: 34px;
+        height: 30px;
+        padding: 0 10px;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .tool-btn:hover {
+        background: color-mix(in srgb, var(--vscode-button-background) 34%, var(--vscode-editor-background) 66%);
+      }
+
       .panel {
         border: 1px solid var(--vscode-panel-border);
         border-radius: 10px;
         overflow: hidden;
-        background: color-mix(in srgb, var(--vscode-editor-background) 94%, var(--vscode-editor-foreground) 6%);
+        background:
+          radial-gradient(circle at top, color-mix(in srgb, var(--vscode-editor-background) 90%, var(--vscode-editor-foreground) 10%) 0%, transparent 52%),
+          color-mix(in srgb, var(--vscode-editor-background) 96%, var(--vscode-editor-foreground) 4%);
       }
 
       #graph {
@@ -1295,6 +1233,72 @@ export class PanelProvider {
         border-radius: 50%;
       }
 
+      .graph-edge .edge-hitbox {
+        cursor: help;
+      }
+
+      .graph-edge .edge-line {
+        fill: none;
+        stroke: var(--vscode-editor-foreground);
+        stroke-opacity: 0.3;
+        stroke-width: 1.6;
+      }
+
+      .graph-edge .edge-label-bg {
+        fill: color-mix(in srgb, var(--vscode-editor-background) 90%, transparent 10%);
+        stroke: color-mix(in srgb, var(--vscode-panel-border) 78%, transparent 22%);
+        stroke-width: 1;
+        rx: 8;
+        ry: 8;
+      }
+
+      .graph-edge .edge-label {
+        fill: var(--vscode-editor-foreground);
+        font-size: 11px;
+        opacity: 0.95;
+        pointer-events: none;
+      }
+
+      .graph-edge.active .edge-line {
+        stroke-opacity: 0.68;
+        stroke-width: 2.2;
+      }
+
+      .graph-edge.active .edge-label-bg {
+        fill: color-mix(in srgb, var(--vscode-editor-background) 80%, var(--vscode-editor-foreground) 20%);
+      }
+
+      .graph-node {
+        cursor: default;
+      }
+
+      .graph-node.clickable {
+        cursor: pointer;
+      }
+
+      .graph-node .node-shape {
+        stroke: color-mix(in srgb, var(--vscode-editor-foreground) 40%, transparent 60%);
+        stroke-width: 2.2;
+        filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--vscode-editor-background) 65%, transparent 35%));
+      }
+
+      .graph-node .node-title {
+        fill: color-mix(in srgb, var(--vscode-editor-foreground) 92%, #102030 8%);
+        font-size: 13px;
+        font-weight: 700;
+        text-anchor: middle;
+        dominant-baseline: middle;
+        pointer-events: none;
+      }
+
+      .graph-node.clickable:hover .node-shape {
+        stroke: color-mix(in srgb, var(--vscode-editor-foreground) 68%, transparent 32%);
+      }
+
+      .graph-node.clickable:hover .node-title {
+        fill: var(--vscode-editor-foreground);
+      }
+
       .empty {
         margin: 20px 0 0 0;
         opacity: 0.7;
@@ -1307,7 +1311,8 @@ export class PanelProvider {
     <section class="header">
       <div>
         <h2 class="title">Relationship Graph</h2>
-        <p class="subtitle">Связи сущностей по полю refs: персонажи, линии, главы, сцены и всё редакторское веселье.</p>
+        <p class="subtitle">Связи по полю refs только между персонажами и сюжетными линиями.</p>
+        <div id="edgeDetails" class="edge-details">Наведите на дугу, чтобы посмотреть подпись отношения.</div>
       </div>
       <div class="controls">
         <button id="zoomOut" class="tool-btn" type="button" title="Уменьшить">−</button>
@@ -1335,6 +1340,7 @@ export class PanelProvider {
       const legend = document.getElementById('legend');
       const panel = document.getElementById('graphPanel');
       const emptyState = document.getElementById('emptyState');
+      const edgeDetails = document.getElementById('edgeDetails');
       const zoomInBtn = document.getElementById('zoomIn');
       const zoomOutBtn = document.getElementById('zoomOut');
       const zoomResetBtn = document.getElementById('zoomReset');
@@ -1386,15 +1392,31 @@ export class PanelProvider {
       function renderGraph() {
         const width = 1200;
         const height = 760;
-        const nodes = graph.nodes.map((node) => ({ ...node, x: 0, y: 0, vx: 0, vy: 0 }));
+        const nodes = graph.nodes.map((node) => {
+          const metrics = measureNode(node);
+          return {
+            ...node,
+            x: 0,
+            y: 0,
+            vx: 0,
+            vy: 0,
+            rx: metrics.rx,
+            ry: metrics.ry,
+            width: metrics.width,
+            height: metrics.height
+          };
+        });
 
         const nodeById = new Map(nodes.map((node) => [node.id, node]));
         const links = graph.edges
           .map((edge) => ({
             source: nodeById.get(edge.source),
-            target: nodeById.get(edge.target)
+            target: nodeById.get(edge.target),
+            label: typeof edge.label === 'string' ? edge.label : ''
           }))
           .filter((edge) => edge.source && edge.target);
+
+        assignEdgeCurvature(links);
 
         const degreeById = new Map();
         for (const node of nodes) {
@@ -1454,29 +1476,37 @@ export class PanelProvider {
             .filter(Boolean)
             .sort((a, b) => (degreeById.get(b.id) || 0) - (degreeById.get(a.id) || 0));
 
-          const ringStep = Math.max(28, Math.min(cellW, cellH) * 0.07);
-          const ringBase = Math.max(12, Math.min(cellW, cellH) * 0.12);
-          compNodes.forEach((node, index) => {
-            const ring = Math.floor(Math.sqrt(index));
-            const ringCount = Math.max(1, 6 * ring);
-            const posInRing = ring === 0 ? 0 : index - ring * ring;
-            const angle = ring === 0 ? 0 : (posInRing / ringCount) * Math.PI * 2;
-            const r = ring === 0 ? 0 : ringBase + ring * ringStep;
-            node.x = cx + Math.cos(angle) * r;
-            node.y = cy + Math.sin(angle) * r;
+          if (compNodes.length === 1) {
+            compNodes[0].x = cx;
+            compNodes[0].y = cy;
+            return;
+          }
+
+          const majorNode = compNodes[0];
+          const outerNodes = compNodes.length > 4 ? compNodes.slice(1) : compNodes;
+          if (compNodes.length > 4) {
+            majorNode.x = cx;
+            majorNode.y = cy;
+          }
+
+          const radiusX = Math.max(120, cellW * (compNodes.length > 4 ? 0.28 : 0.2));
+          const radiusY = Math.max(92, cellH * (compNodes.length > 4 ? 0.26 : 0.18));
+          outerNodes.forEach((node, index) => {
+            const angle = (-Math.PI / 2) + (index / outerNodes.length) * Math.PI * 2;
+            node.x = cx + Math.cos(angle) * radiusX;
+            node.y = cy + Math.sin(angle) * radiusY;
           });
         });
 
-        const repulsion = 5600;
-        const spring = 0.008;
-        const damping = 0.84;
-        const desiredLength = 165;
-        const collisionDist = 52;
-        const centering = 0.003;
+        const repulsion = 13500;
+        const spring = 0.01;
+        const damping = 0.82;
+        const desiredLength = 190;
+        const centering = 0.0024;
         const centerX = width / 2;
         const centerY = height / 2;
 
-        for (let step = 0; step < 380; step += 1) {
+        for (let step = 0; step < 420; step += 1) {
           for (let i = 0; i < nodes.length; i += 1) {
             const a = nodes[i];
             for (let j = i + 1; j < nodes.length; j += 1) {
@@ -1494,8 +1524,9 @@ export class PanelProvider {
               b.vx -= dx * force;
               b.vy -= dy * force;
 
+              const collisionDist = Math.max(a.rx + b.rx + 34, a.ry + b.ry + 30);
               if (dist < collisionDist) {
-                const push = (collisionDist - dist) * 0.05;
+                const push = (collisionDist - dist) * 0.06;
                 a.vx += dx * push;
                 a.vy += dy * push;
                 b.vx -= dx * push;
@@ -1510,7 +1541,7 @@ export class PanelProvider {
             const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 0.001);
             const sourceDegree = degreeById.get(link.source.id) || 0;
             const targetDegree = degreeById.get(link.target.id) || 0;
-            const adaptiveLength = desiredLength + Math.min(sourceDegree + targetDegree, 8) * 8;
+            const adaptiveLength = desiredLength + Math.min(sourceDegree + targetDegree, 8) * 10;
             const stretch = dist - adaptiveLength;
             const force = stretch * spring;
             const nx = dx / dist;
@@ -1531,24 +1562,13 @@ export class PanelProvider {
             node.x += node.vx;
             node.y += node.vy;
 
-            node.x = Math.max(26, Math.min(width - 26, node.x));
-            node.y = Math.max(26, Math.min(height - 26, node.y));
+            node.x = Math.max(node.rx + 30, Math.min(width - node.rx - 30, node.x));
+            node.y = Math.max(node.ry + 30, Math.min(height - node.ry - 30, node.y));
           }
         }
 
-        graphBounds = nodes.reduce(
-          (acc, node) => ({
-            minX: Math.min(acc.minX, node.x - 18),
-            minY: Math.min(acc.minY, node.y - 18),
-            maxX: Math.max(acc.maxX, node.x + 120),
-            maxY: Math.max(acc.maxY, node.y + 18)
-          }),
-          { minX: Number.POSITIVE_INFINITY, minY: Number.POSITIVE_INFINITY, maxX: Number.NEGATIVE_INFINITY, maxY: Number.NEGATIVE_INFINITY }
-        );
-
-        if (!Number.isFinite(graphBounds.minX)) {
-          graphBounds = { minX: 0, minY: 0, maxX: width, maxY: height };
-        }
+        const linkGeometries = links.map((link, index) => buildEdgeGeometry(link, index));
+        graphBounds = collectGraphBounds(nodes, linkGeometries, width, height);
 
         const markers =
           '<defs>' +
@@ -1557,11 +1577,22 @@ export class PanelProvider {
             '</marker>' +
           '</defs>';
 
-        const edgesMarkup = links
-          .map((link) => {
+        const edgesMarkup = linkGeometries
+          .map((edge) => {
+            const displayLabel = shorten(edge.label || '', 28);
+            const encodedLabel = encodeURIComponent(edge.label || '');
+            const labelWidth = estimateLabelWidth(displayLabel);
+            const hasLabel = Boolean(displayLabel);
             return (
-              '<line x1="' + link.source.x.toFixed(1) + '" y1="' + link.source.y.toFixed(1) + '" x2="' + link.target.x.toFixed(1) + '" y2="' + link.target.y.toFixed(1) + '" ' +
-              'stroke="var(--vscode-editor-foreground)" stroke-opacity="0.25" stroke-width="1.2" marker-end="url(#arrow)"></line>'
+              '<g class="graph-edge" data-edge-label="' + encodedLabel + '">' +
+                '<path class="edge-hitbox" d="' + edge.path + '" stroke="transparent" stroke-width="20" fill="none"></path>' +
+                '<path class="edge-line" d="' + edge.path + '" marker-end="url(#arrow)"></path>' +
+                (hasLabel
+                  ? '<rect class="edge-label-bg" x="' + (edge.labelX - labelWidth / 2).toFixed(1) + '" y="' + (edge.labelY - 11).toFixed(1) + '" width="' + labelWidth.toFixed(1) + '" height="22"></rect>' +
+                    '<text class="edge-label" x="' + edge.labelX.toFixed(1) + '" y="' + (edge.labelY + 3).toFixed(1) + '" text-anchor="middle">' + escapeHtml(displayLabel) + '</text>'
+                  : '') +
+                (edge.label ? '<title>' + escapeHtml(edge.label) + '</title>' : '') +
+              '</g>'
             );
           })
           .join('');
@@ -1574,9 +1605,9 @@ export class PanelProvider {
             const attrs = canOpen ? ' data-file-path="' + encodedPath + '" class="graph-node clickable"' : ' class="graph-node"';
             return (
               '<g transform="translate(' + node.x.toFixed(1) + ',' + node.y.toFixed(1) + ')"' + attrs + '>' +
-                '<circle r="9" fill="' + color + '" stroke="var(--vscode-editor-background)" stroke-width="2"></circle>' +
+                '<ellipse class="node-shape" rx="' + node.rx.toFixed(1) + '" ry="' + node.ry.toFixed(1) + '" fill="' + color + '"></ellipse>' +
                 '<title>' + escapeHtml(node.title + ' (' + node.type + ')') + '</title>' +
-                '<text x="12" y="4" font-size="11" fill="var(--vscode-editor-foreground)">' + escapeHtml(shorten(node.title, 24)) + '</text>' +
+                '<text class="node-title" x="0" y="1">' + escapeHtml(shorten(node.title, 24)) + '</text>' +
               '</g>'
             );
           })
@@ -1613,6 +1644,146 @@ export class PanelProvider {
 
       function clamp(value, min, max) {
         return Math.max(min, Math.min(max, value));
+      }
+
+      function measureNode(node) {
+        const title = String(node.title || '');
+        const length = Math.max(4, title.length);
+        const width = clamp(42 + length * 8.5, 92, 220);
+        const height = 54;
+        return {
+          width,
+          height,
+          rx: width / 2,
+          ry: height / 2
+        };
+      }
+
+      function assignEdgeCurvature(links) {
+        const groups = new Map();
+        links.forEach((link) => {
+          const pairKey = [link.source.id, link.target.id].sort((a, b) => a.localeCompare(b, 'ru')).join('::');
+          if (!groups.has(pairKey)) {
+            groups.set(pairKey, []);
+          }
+          groups.get(pairKey).push(link);
+        });
+
+        groups.forEach((group) => {
+          group.sort((left, right) => {
+            const leftKey = left.source.id + '->' + left.target.id;
+            const rightKey = right.source.id + '->' + right.target.id;
+            return leftKey.localeCompare(rightKey, 'ru');
+          });
+
+          if (group.length === 1) {
+            group[0].curvature = 0.14;
+            return;
+          }
+
+          const middle = (group.length - 1) / 2;
+          group.forEach((link, index) => {
+            const offset = (index - middle) * 0.26;
+            link.curvature = Math.abs(offset) < 0.01 ? 0.18 : offset;
+          });
+        });
+      }
+
+      function buildEdgeGeometry(link, index) {
+        const dx = link.target.x - link.source.x;
+        const dy = link.target.y - link.source.y;
+        const distance = Math.max(Math.sqrt(dx * dx + dy * dy), 0.001);
+        const nx = dx / distance;
+        const ny = dy / distance;
+        const perpX = -ny;
+        const perpY = nx;
+        const curveOffset = clamp(distance * Math.abs(link.curvature || 0.14), 34, 150) * Math.sign(link.curvature || 1);
+        const midX = (link.source.x + link.target.x) / 2;
+        const midY = (link.source.y + link.target.y) / 2;
+        const controlX = midX + perpX * curveOffset;
+        const controlY = midY + perpY * curveOffset;
+
+        const sourceAnchor = ellipseAnchor(link.source, controlX, controlY);
+        const targetAnchor = ellipseAnchor(link.target, controlX, controlY);
+        const labelPoint = quadraticPoint(sourceAnchor.x, sourceAnchor.y, controlX, controlY, targetAnchor.x, targetAnchor.y, 0.5);
+        const labelLift = 10 + Math.min(Math.abs(curveOffset) * 0.08, 10);
+
+        return {
+          id: 'edge-' + index,
+          label: link.label || '',
+          path:
+            'M ' + sourceAnchor.x.toFixed(1) + ' ' + sourceAnchor.y.toFixed(1) +
+            ' Q ' + controlX.toFixed(1) + ' ' + controlY.toFixed(1) +
+            ' ' + targetAnchor.x.toFixed(1) + ' ' + targetAnchor.y.toFixed(1),
+          controlX,
+          controlY,
+          labelX: labelPoint.x,
+          labelY: labelPoint.y - Math.sign(curveOffset || 1) * labelLift,
+          points: [sourceAnchor, { x: controlX, y: controlY }, targetAnchor]
+        };
+      }
+
+      function collectGraphBounds(nodes, edges, width, height) {
+        const initial = {
+          minX: Number.POSITIVE_INFINITY,
+          minY: Number.POSITIVE_INFINITY,
+          maxX: Number.NEGATIVE_INFINITY,
+          maxY: Number.NEGATIVE_INFINITY
+        };
+
+        const nodeBounds = nodes.reduce((acc, node) => ({
+          minX: Math.min(acc.minX, node.x - node.rx - 14),
+          minY: Math.min(acc.minY, node.y - node.ry - 14),
+          maxX: Math.max(acc.maxX, node.x + node.rx + 14),
+          maxY: Math.max(acc.maxY, node.y + node.ry + 14)
+        }), initial);
+
+        const fullBounds = edges.reduce((acc, edge) => {
+          const labelPad = Math.max(26, estimateLabelWidth(shorten(edge.label || '', 28)) / 2 + 8);
+          return edge.points.reduce((nextAcc, point) => ({
+            minX: Math.min(nextAcc.minX, point.x - labelPad),
+            minY: Math.min(nextAcc.minY, point.y - 24),
+            maxX: Math.max(nextAcc.maxX, point.x + labelPad),
+            maxY: Math.max(nextAcc.maxY, point.y + 24)
+          }), {
+            minX: Math.min(acc.minX, edge.labelX - labelPad),
+            minY: Math.min(acc.minY, edge.labelY - 20),
+            maxX: Math.max(acc.maxX, edge.labelX + labelPad),
+            maxY: Math.max(acc.maxY, edge.labelY + 20)
+          });
+        }, nodeBounds);
+
+        if (!Number.isFinite(fullBounds.minX)) {
+          return { minX: 0, minY: 0, maxX: width, maxY: height };
+        }
+
+        return fullBounds;
+      }
+
+      function ellipseAnchor(node, towardX, towardY) {
+        const dirX = towardX - node.x;
+        const dirY = towardY - node.y;
+        const length = Math.max(Math.sqrt(dirX * dirX + dirY * dirY), 0.001);
+        const ux = dirX / length;
+        const uy = dirY / length;
+        const scale = 1 / Math.sqrt((ux * ux) / (node.rx * node.rx) + (uy * uy) / (node.ry * node.ry));
+        return {
+          x: node.x + ux * scale,
+          y: node.y + uy * scale
+        };
+      }
+
+      function quadraticPoint(x1, y1, cx, cy, x2, y2, t) {
+        const mt = 1 - t;
+        return {
+          x: mt * mt * x1 + 2 * mt * t * cx + t * t * x2,
+          y: mt * mt * y1 + 2 * mt * t * cy + t * t * y2
+        };
+      }
+
+      function estimateLabelWidth(text) {
+        const length = String(text || '').length;
+        return Math.max(42, 18 + length * 6.4);
       }
 
       function zoomAt(factor, clientX, clientY) {
@@ -1710,6 +1881,33 @@ export class PanelProvider {
         vscode.postMessage({ type: 'openEntity', filePath: decodeURIComponent(encodedPath) });
       });
 
+      svg.addEventListener('mousemove', (event) => {
+        const edge = event.target.closest('g.graph-edge[data-edge-label]');
+        const allEdges = svg.querySelectorAll('g.graph-edge.active');
+        allEdges.forEach((item) => item.classList.remove('active'));
+
+        if (!edge) {
+          if (edgeDetails) {
+            edgeDetails.textContent = 'Наведите на дугу, чтобы посмотреть подпись отношения.';
+          }
+          return;
+        }
+
+        edge.classList.add('active');
+        if (edgeDetails) {
+          const encoded = edge.getAttribute('data-edge-label') || '';
+          edgeDetails.textContent = encoded ? decodeURIComponent(encoded) : 'Подпись отношения недоступна.';
+        }
+      });
+
+      svg.addEventListener('mouseleave', () => {
+        const allEdges = svg.querySelectorAll('g.graph-edge.active');
+        allEdges.forEach((item) => item.classList.remove('active'));
+        if (edgeDetails) {
+          edgeDetails.textContent = 'Наведите на дугу, чтобы посмотреть подпись отношения.';
+        }
+      });
+
       function shorten(value, max) {
         const text = String(value || '');
         if (text.length <= max) {
@@ -1730,177 +1928,6 @@ export class PanelProvider {
   }
 
   private buildRelationshipGraphData(data: string): { nodes: GraphNode[]; edges: GraphEdge[] } {
-    try {
-      const parsed = JSON.parse(data) as {
-        entities?: Array<{
-          frontmatter?: Record<string, unknown>;
-          filePath?: string;
-        }>;
-      };
-
-      const entities = Array.isArray(parsed.entities) ? parsed.entities : [];
-      const nodes: GraphNode[] = entities.map((entity) => {
-        const frontmatter = entity.frontmatter ?? {};
-        const rawStatus = typeof frontmatter.status === "string" ? frontmatter.status : "todo";
-
-        const refs = Array.isArray(frontmatter.refs)
-          ? frontmatter.refs.filter((ref): ref is string => typeof ref === "string")
-          : [];
-
-        return {
-          id: typeof frontmatter.id === "string" ? frontmatter.id : "unknown-id",
-          title: typeof frontmatter.title === "string" ? frontmatter.title : "Untitled",
-          type: typeof frontmatter.type === "string" ? frontmatter.type : "unknown",
-          status: normalizeStatus(rawStatus),
-          filePath: entity.filePath ?? "",
-          refs
-        };
-      });
-
-      const knownIds = new Set(nodes.map((node) => node.id));
-      const edgeDedup = new Set<string>();
-      const edges: GraphEdge[] = [];
-
-      for (const node of nodes) {
-        for (const ref of node.refs) {
-          if (!knownIds.has(ref)) {
-            continue;
-          }
-
-          const key = `${node.id}->${ref}`;
-          if (edgeDedup.has(key)) {
-            continue;
-          }
-
-          edgeDedup.add(key);
-          edges.push({ source: node.id, target: ref });
-        }
-      }
-
-      return { nodes, edges };
-    } catch {
-      return { nodes: [], edges: [] };
-    }
+    return buildRelationshipGraphData(data);
   }
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-function normalizeStatus(status: string): string {
-  const normalized = status.trim().toLowerCase();
-  if (["todo", "to-do", "backlog", "planned"].includes(normalized)) {
-    return "todo";
-  }
-  if (["in-progress", "inprogress", "doing", "wip"].includes(normalized)) {
-    return "in-progress";
-  }
-  if (["review", "qa", "ready-for-review"].includes(normalized)) {
-    return "review";
-  }
-  if (["done", "completed", "closed"].includes(normalized)) {
-    return "done";
-  }
-  return "todo";
-}
-
-function extractSceneMeta(frontmatter: Record<string, unknown>): SceneMeta {
-  return {
-    what: readString(frontmatter.sceneWhat),
-    why: readString(frontmatter.sceneWhy),
-    pov: readString(frontmatter.scenePov),
-    change: readString(frontmatter.sceneChange),
-    plotlines: readStringArray(frontmatter.scenePlotlines)
-  };
-}
-
-function getMissingSceneFields(sceneMeta: SceneMeta): string[] {
-  const missing: string[] = [];
-  if (!sceneMeta.what.trim()) {
-    missing.push("what");
-  }
-  if (!sceneMeta.why.trim()) {
-    missing.push("why");
-  }
-  if (!sceneMeta.pov.trim()) {
-    missing.push("pov");
-  }
-  if (!sceneMeta.change.trim()) {
-    missing.push("change");
-  }
-  if (!sceneMeta.plotlines.length) {
-    missing.push("plotlines");
-  }
-  return missing;
-}
-
-function readString(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function readStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function normalizeSignalCard(signal: Partial<AnalysisSignal>): SignalCard {
-  const severity = signal.severity === "critical" || signal.severity === "warning" || signal.severity === "info"
-    ? signal.severity
-    : "info";
-  const status = signal.status === "ignored" || signal.status === "resolved" || signal.status === "deferred" || signal.status === "open"
-    ? signal.status
-    : "open";
-
-  return {
-    id: typeof signal.id === "string" ? signal.id : "unknown-signal",
-    kind: isAnalysisSignalKind(signal.kind) ? signal.kind : "scene-without-links",
-    group: typeof signal.group === "string" ? signal.group : "forgotten",
-    severity,
-    status,
-    entityId: typeof signal.entityId === "string" ? signal.entityId : "unknown-entity",
-    filePath: typeof signal.filePath === "string" ? signal.filePath : "",
-    title: typeof signal.title === "string" ? signal.title : "Сигнал без заголовка",
-    description: typeof signal.description === "string" ? signal.description : "",
-    suggestedAction: typeof signal.suggestedAction === "string" ? signal.suggestedAction : "",
-    passes: Array.isArray(signal.passes)
-      ? signal.passes.filter((pass): pass is EditorialPass => pass === "logic" || pass === "rhythm" || pass === "style")
-      : [],
-    relatedEntityIds: Array.isArray(signal.relatedEntityIds)
-      ? signal.relatedEntityIds.filter((id): id is string => typeof id === "string")
-      : []
-  };
-}
-
-function countSignals(signals: SignalCard[], group: string): number {
-  return signals.filter((signal) => signal.group === group).length;
-}
-
-function countSignalsByPass(signals: SignalCard[], pass: EditorialPass): number {
-  return signals.filter((signal) => signal.passes.includes(pass)).length;
-}
-
-function isAnalysisSignalStatus(value: string | undefined): value is AnalysisSignalStatus {
-  return value === "open" || value === "ignored" || value === "resolved" || value === "deferred";
-}
-
-function isAnalysisSignalKind(value: unknown): value is AnalysisSignalKind {
-  return value === "missing-scene-purpose"
-    || value === "missing-scene-change"
-    || value === "missing-scene-pov"
-    || value === "missing-scene-plotlines"
-    || value === "scene-without-links"
-    || value === "plotline-without-progression"
-    || value === "entity-without-mentions"
-    || value === "open-editorial-task-without-links"
-    || value === "open-relationship-without-links";
 }
