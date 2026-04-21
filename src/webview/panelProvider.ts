@@ -1,16 +1,17 @@
 import * as vscode from "vscode";
 import { AnalysisSignalKind, AnalysisSignalStatus } from "../analysis/domain/types/analysisTypes";
-import { ProjectService } from "../domain/projectService";
+import { ProjectApplicationService } from "../project/application/services/projectApplicationService";
 import { renderBoardHtml } from "./board/presentation/renderBoardHtml";
+import { RelationshipGraphData, renderRelationshipGraphHtml } from "./graph/presentation/renderRelationshipGraphHtml";
 import { extractRelationshipEntries } from "./graph/relationshipParser";
 import { bindOpenEntityMessages, openEntityFile } from "./shared/openEntityMessageBinder";
 import { normalizeLookupKey } from "./shared/html";
-import { getStylesheetUri, getWebviewOptions } from "./shared/webviewAssets";
+import { getNodeModuleScriptUri, getStylesheetUri, getWebviewOptions } from "./shared/webviewAssets";
 import { renderWritingSignalsHtml } from "./writing-signals/presentation/renderWritingSignalsHtml";
 
 export class PanelProvider {
   constructor(
-    private readonly projectService: ProjectService,
+    private readonly projectService: ProjectApplicationService,
     private readonly extensionUri?: vscode.Uri
   ) {}
 
@@ -48,6 +49,24 @@ export class PanelProvider {
     );
   }
 
+  async openRelationshipGraph(): Promise<void> {
+    const panel = vscode.window.createWebviewPanel(
+      "bookProjectRelationshipGraph",
+      "Relationship Graph",
+      vscode.ViewColumn.Beside,
+      getWebviewOptions(this.extensionUri)
+    );
+
+    this.bindOpenEntity(panel);
+
+    const data = await this.projectService.getIndexJson();
+    panel.webview.html = renderRelationshipGraphHtml(
+      this.buildRelationshipGraphData(data),
+      getStylesheetUri(panel.webview, this.extensionUri, "graph.css"),
+      getNodeModuleScriptUri(panel.webview, this.extensionUri, ["cytoscape", "dist", "cytoscape.umd.js"])
+    );
+  }
+
   private bindOpenEntity(panel: vscode.WebviewPanel): void {
     bindOpenEntityMessages(panel, {
       openEntity: async (filePath) => openEntityFile(filePath),
@@ -61,14 +80,12 @@ export class PanelProvider {
     });
   }
 
-  buildRelationshipGraphData(data: string): {
-    nodes: Array<{ id: string; label: string; type: string }>;
-    edges: Array<{ source: string; target: string; label?: string }>;
-  } {
+  buildRelationshipGraphData(data: string): RelationshipGraphData {
     try {
       const parsed = JSON.parse(data) as {
         entities?: Array<{
           frontmatter?: Record<string, unknown>;
+          filePath?: string;
           body?: string;
         }>;
       };
@@ -82,7 +99,8 @@ export class PanelProvider {
       const nodes = graphEntities.map((entity) => ({
         id: typeof entity.frontmatter?.id === "string" ? entity.frontmatter.id : "unknown-id",
         label: typeof entity.frontmatter?.title === "string" ? entity.frontmatter.title : "Untitled",
-        type: typeof entity.frontmatter?.type === "string" ? entity.frontmatter.type : "unknown"
+        type: typeof entity.frontmatter?.type === "string" ? entity.frontmatter.type : "unknown",
+        filePath: typeof entity.filePath === "string" ? entity.filePath : ""
       }));
 
       const knownIds = new Set(nodes.map((node) => node.id));

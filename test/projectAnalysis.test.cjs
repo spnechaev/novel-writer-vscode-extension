@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { ProjectAnalysis } = require("../dist/domain/projectAnalysis");
+const { ProjectAnalyzer } = require("../dist/analysis/domain/services/projectAnalyzer");
 
 function mkEntity(frontmatter, body = "") {
   return {
@@ -37,7 +37,7 @@ function mkScene(id, title, frontmatter = {}, body = "") {
 }
 
 test("ProjectAnalysis собирает сигналы по незаполненным сценам и незадействованным сущностям", () => {
-  const analyzer = new ProjectAnalysis();
+  const analyzer = new ProjectAnalyzer();
   const result = analyzer.analyze({
     projectRoot: "book-project",
     entities: [
@@ -87,7 +87,7 @@ test("ProjectAnalysis собирает сигналы по незаполнен�
 });
 
 test("ProjectAnalysis уважает analysisIgnore и не шумит там, где его попросили заткнуться", () => {
-  const analyzer = new ProjectAnalysis();
+  const analyzer = new ProjectAnalyzer();
   const result = analyzer.analyze({
     projectRoot: "book-project",
     entities: [
@@ -117,7 +117,7 @@ test("ProjectAnalysis уважает analysisIgnore и не шумит там, �
 });
 
 test("ProjectAnalysis подхватывает сохранённые статусы сигналов из frontmatter", () => {
-  const analyzer = new ProjectAnalysis();
+  const analyzer = new ProjectAnalyzer();
   const result = analyzer.analyze({
     projectRoot: "book-project",
     entities: [
@@ -144,7 +144,7 @@ test("ProjectAnalysis подхватывает сохранённые стату
 });
 
 test("ProjectAnalysis строит сигналы второй итерации для фактуры, повторов и выпавших персонажей", () => {
-  const analyzer = new ProjectAnalysis();
+  const analyzer = new ProjectAnalyzer();
   const result = analyzer.analyze({
     projectRoot: "book-project",
     entities: [

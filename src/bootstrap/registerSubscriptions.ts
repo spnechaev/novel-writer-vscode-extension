@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { BOOK_ROOT } from "../storage/projectPaths";
+import { BOOK_ROOT } from "../project/infrastructure/config/projectPaths";
 import { ExtensionComposition } from "./compositionRoot";
 
 export async function registerExtensionSubscriptions(

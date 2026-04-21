@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { PROJECT_PATHS } from "../../../storage/projectPaths";
+import { PROJECT_PATHS } from "../../../project/infrastructure/config/projectPaths";
 import type { TypographyConfig } from "../../application/types/exportTypes";
 
 export class FileTypographyConfigRepository {

@@ -5,7 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const matter = require("gray-matter");
 
-const { MarkdownRepository } = require("../dist/storage/markdownRepository");
+const { FileSystemProjectRepository } = require("../dist/project/infrastructure/persistence/fileSystemProjectRepository");
 
 async function mkWorkspace() {
   return fs.mkdtemp(path.join(os.tmpdir(), "novelwriter-test-"));
@@ -17,7 +17,7 @@ async function readUtf8(filePath) {
 
 test("initializeProject создаёт структуру и базовые файлы", async () => {
   const workspaceRoot = await mkWorkspace();
-  const repo = new MarkdownRepository(workspaceRoot);
+  const repo = new FileSystemProjectRepository(workspaceRoot);
 
   await repo.initializeProject();
 
@@ -43,7 +43,7 @@ test("initializeProject создаёт структуру и базовые фа
 
 test("createEntity для scene создаёт файл с расширенным frontmatter", async () => {
   const workspaceRoot = await mkWorkspace();
-  const repo = new MarkdownRepository(workspaceRoot);
+  const repo = new FileSystemProjectRepository(workspaceRoot);
 
   const uri = await repo.createEntity("scene", "Первая Сцена");
   const text = await readUtf8(uri.fsPath);
@@ -60,7 +60,7 @@ test("createEntity для scene создаёт файл с расширенны�
 
 test("readIndex возвращает только валидные сущности", async () => {
   const workspaceRoot = await mkWorkspace();
-  const repo = new MarkdownRepository(workspaceRoot);
+  const repo = new FileSystemProjectRepository(workspaceRoot);
 
   await repo.initializeProject();
   await repo.createEntity("character", "Герой");
@@ -88,7 +88,7 @@ test("readIndex возвращает только валидные сущнос�
 
 test("updateAnalysisSignalStatus сохраняет статусы сигналов в frontmatter", async () => {
   const workspaceRoot = await mkWorkspace();
-  const repo = new MarkdownRepository(workspaceRoot);
+  const repo = new FileSystemProjectRepository(workspaceRoot);
 
   const uri = await repo.createEntity("scene", "Сцена со статусом");
   await repo.updateAnalysisSignalStatus(uri.fsPath, "missing-scene-purpose", "deferred");

@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { MarkdownRepository } from "../storage/markdownRepository";
+import { FileSystemProjectRepository } from "../project/infrastructure/persistence/fileSystemProjectRepository";
 import { buildOrderedManuscriptMarkdown } from "./application/queries/buildOrderedManuscript";
 import { FileTypographyConfigRepository } from "./infrastructure/config/fileTypographyConfigRepository";
 import { renderDocxBuffer } from "./infrastructure/renderers/docxRenderer";
@@ -10,7 +10,7 @@ import { renderPdfBuffer } from "./infrastructure/renderers/pdfRenderer";
 export class ExportService {
   private readonly typographyConfigRepository: FileTypographyConfigRepository;
 
-  constructor(private readonly repository: MarkdownRepository, private readonly workspaceRoot: string) {
+  constructor(private readonly repository: FileSystemProjectRepository, private readonly workspaceRoot: string) {
     this.typographyConfigRepository = new FileTypographyConfigRepository(workspaceRoot);
   }
 

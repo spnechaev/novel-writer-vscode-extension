@@ -7,7 +7,10 @@ export function getWebviewOptions(extensionUri?: vscode.Uri): vscode.WebviewOpti
 
   return {
     enableScripts: true,
-    localResourceRoots: [vscode.Uri.joinPath(extensionUri, "src", "webview", "styles")]
+    localResourceRoots: [
+      vscode.Uri.joinPath(extensionUri, "src", "webview", "styles"),
+      vscode.Uri.joinPath(extensionUri, "node_modules", "cytoscape", "dist")
+    ]
   };
 }
 
@@ -17,4 +20,16 @@ export function getStylesheetUri(webview: vscode.Webview, extensionUri: vscode.U
   }
 
   return webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "src", "webview", "styles", fileName)).toString();
+}
+
+export function getNodeModuleScriptUri(
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri | undefined,
+  modulePathSegments: string[]
+): string {
+  if (!extensionUri) {
+    return "";
+  }
+
+  return webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "node_modules", ...modulePathSegments)).toString();
 }

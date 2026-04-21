@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { BOOK_ROOT } from "../storage/projectPaths";
+import { BOOK_ROOT } from "../project/infrastructure/config/projectPaths";
 import { ExtensionComposition } from "./compositionRoot";
 
 export function registerExtensionCommands(
@@ -21,6 +21,9 @@ export function registerExtensionCommands(
     }),
     vscode.commands.registerCommand("bookProject.openBoard", async () => {
       await panelProvider.openBoard();
+    }),
+    vscode.commands.registerCommand("bookProject.openRelationshipGraph", async () => {
+      await panelProvider.openRelationshipGraph();
     }),
     vscode.commands.registerCommand("bookProject.openWritingSignals", async () => {
       await panelProvider.openWritingSignals();

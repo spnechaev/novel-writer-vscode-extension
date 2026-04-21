@@ -94,6 +94,19 @@ test("buildRelationshipGraphData парсит связи персонажей и
   );
 
   assert.deepEqual(
+    graph.nodes
+      .map((node) => ({ id: node.id, filePath: node.filePath || "" }))
+      .sort((left, right) => left.id.localeCompare(right.id, "ru")),
+    [
+      { id: "dmitry", filePath: "book-project/characters/dmitry.md" },
+      { id: "gleb", filePath: "book-project/characters/gleb.md" },
+      { id: "lera", filePath: "book-project/characters/lera.md" },
+      { id: "line-1", filePath: "book-project/plotlines/line-1.md" },
+      { id: "oleg", filePath: "book-project/characters/oleg.md" }
+    ]
+  );
+
+  assert.deepEqual(
     graph.edges
       .map((edge) => `${edge.source}->${edge.target}`)
       .sort(),

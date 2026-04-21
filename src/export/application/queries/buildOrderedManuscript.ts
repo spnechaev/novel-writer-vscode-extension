@@ -1,6 +1,6 @@
-import type { MarkdownRepository } from "../../../storage/markdownRepository";
+import type { FileSystemProjectRepository } from "../../../project/infrastructure/persistence/fileSystemProjectRepository";
 
-export async function buildOrderedManuscriptMarkdown(repository: MarkdownRepository): Promise<string> {
+export async function buildOrderedManuscriptMarkdown(repository: FileSystemProjectRepository): Promise<string> {
   const index = await repository.readIndex();
   const chapters = index.entities
     .filter((e) => e.frontmatter.type === "chapter")
