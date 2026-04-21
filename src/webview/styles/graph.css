@@ -1,0 +1,194 @@
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  padding: 16px;
+  font-family: var(--vscode-font-family);
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.subtitle {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.edge-details {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0.78;
+  max-width: 780px;
+}
+
+.controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-btn {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--vscode-button-background) 22%, var(--vscode-editor-background) 78%);
+  color: var(--vscode-editor-foreground);
+  min-width: 34px;
+  height: 30px;
+  padding: 0 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tool-btn:hover {
+  background: color-mix(in srgb, var(--vscode-button-background) 34%, var(--vscode-editor-background) 66%);
+}
+
+.panel {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--vscode-editor-background) 90%, var(--vscode-editor-foreground) 10%) 0%, transparent 52%),
+    color-mix(in srgb, var(--vscode-editor-background) 96%, var(--vscode-editor-foreground) 4%);
+}
+
+#graph {
+  width: 100%;
+  height: min(72vh, 860px);
+  display: block;
+  cursor: grab;
+  user-select: none;
+}
+
+#graph.dragging {
+  cursor: grabbing;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--vscode-panel-border);
+  background: color-mix(in srgb, var(--vscode-editor-background) 96%, var(--vscode-editor-foreground) 4%);
+}
+
+.legend-item {
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.graph-edge .edge-hitbox {
+  cursor: help;
+}
+
+.graph-edge .edge-line {
+  fill: none;
+  stroke: var(--vscode-editor-foreground);
+  stroke-opacity: 0.3;
+  stroke-width: 1.6;
+}
+
+.graph-edge .edge-label-bg {
+  fill: color-mix(in srgb, var(--vscode-editor-background) 90%, transparent 10%);
+  stroke: color-mix(in srgb, var(--vscode-panel-border) 78%, transparent 22%);
+  stroke-width: 1;
+  rx: 8;
+  ry: 8;
+}
+
+.graph-edge .edge-label {
+  fill: var(--vscode-editor-foreground);
+  font-size: 11px;
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+.graph-edge.active .edge-line {
+  stroke-opacity: 0.68;
+  stroke-width: 2.2;
+}
+
+.graph-edge.active .edge-label-bg {
+  fill: color-mix(in srgb, var(--vscode-editor-background) 80%, var(--vscode-editor-foreground) 20%);
+}
+
+.graph-node {
+  cursor: default;
+}
+
+.graph-node.clickable {
+  cursor: pointer;
+}
+
+.graph-node .node-shape {
+  stroke: color-mix(in srgb, var(--vscode-editor-foreground) 40%, transparent 60%);
+  stroke-width: 2.2;
+  filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--vscode-editor-background) 65%, transparent 35%));
+}
+
+.graph-node .node-title {
+  fill: color-mix(in srgb, var(--vscode-editor-foreground) 92%, #102030 8%);
+  font-size: 13px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
+.graph-node.clickable:hover .node-shape {
+  stroke: color-mix(in srgb, var(--vscode-editor-foreground) 68%, transparent 32%);
+}
+
+.graph-node.clickable:hover .node-title {
+  fill: var(--vscode-editor-foreground);
+}
+
+.empty {
+  margin: 20px 0 0 0;
+  opacity: 0.7;
+  font-style: italic;
+  font-size: 13px;
+}

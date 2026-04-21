@@ -1,4 +1,4 @@
-import { ProjectAnalysisResult } from "../../types";
+import { ProjectAnalysisResult } from "../../analysis/domain/types/analysisTypes";
 import { countSignals, countSignalsByPass, normalizeSignalCard } from "./analysisHelpers";
 import { AnalysisViewModel } from "./analysisViewTypes";
 

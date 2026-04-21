@@ -1,19 +1,26 @@
 import {
   AnalysisSignal,
   AnalysisSignalKind,
-  BookProjectIndex,
   EditorialPass,
+  ProjectAnalysisResult
+} from "../analysis/domain/types/analysisTypes";
+import {
+  BookProjectIndex,
   FrontmatterBase,
   NormalizedEntityRecord,
-  NormalizedSceneMeta,
-  ProjectAnalysisResult
-} from "../types";
-import { analyzeMarkdownText } from "../diagnostics/languageDiagnostics";
+  NormalizedSceneMeta
+} from "../project/domain/types/projectTypes";
+import type { TextDiagnosticsPort } from "../analysis/application/ports/textDiagnosticsPort";
+import { LanguageDiagnosticsAdapter } from "../analysis/infrastructure/diagnostics/languageDiagnosticsAdapter";
 
 const TODO_PATTERN = /^todo(?::|\b)/i;
 const CLOSED_STATUSES = new Set(["done", "closed", "resolved", "complete", "completed"]);
 
 export class ProjectAnalysis {
+  constructor(
+    private readonly textDiagnostics: TextDiagnosticsPort = new LanguageDiagnosticsAdapter()
+  ) {}
+
   analyze(index: BookProjectIndex): ProjectAnalysisResult {
     const entities = index.entities.map((entity) => normalizeEntity(entity));
     const entityById = new Map(entities.map((entity) => [entity.id, entity]));
@@ -256,7 +263,7 @@ export class ProjectAnalysis {
         );
       }
 
-      const hints = analyzeMarkdownText(sceneText);
+      const hints = this.textDiagnostics.analyzeMarkdownText(sceneText);
       const fillerCount = hints.filter((hint) => hint.kind === "filler-word").length;
       const repeatedPunctuationCount = hints.filter((hint) => hint.kind === "repeated-punctuation").length;
       const spacingCount = hints.filter((hint) => hint.kind === "space-before-punctuation").length;

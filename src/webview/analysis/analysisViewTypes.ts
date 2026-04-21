@@ -1,4 +1,4 @@
-import { AnalysisSignalKind, AnalysisSignalSeverity, AnalysisSignalStatus, EditorialPass } from "../../types";
+import { AnalysisSignalKind, AnalysisSignalSeverity, AnalysisSignalStatus, EditorialPass } from "../../analysis/domain/types/analysisTypes";
 
 export type AnalysisTabId = "forgotten" | "looseEnd" | EditorialPass;
 

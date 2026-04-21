@@ -1,0 +1,192 @@
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  padding: 16px;
+  font-family: var(--vscode-font-family);
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+}
+
+.header {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.subtitle {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  opacity: 0.78;
+}
+
+.stats,
+.tabs,
+.filters,
+.status-filters,
+.passes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pill,
+.tab-btn,
+.filter-btn,
+.pass {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.tab-btn,
+.filter-btn {
+  background: color-mix(in srgb, var(--vscode-editor-background) 88%, var(--vscode-editor-foreground) 12%);
+  color: inherit;
+  cursor: pointer;
+}
+
+.tab-btn.active,
+.filter-btn.active {
+  border-color: var(--vscode-focusBorder);
+  background: color-mix(in srgb, var(--vscode-button-background, var(--vscode-focusBorder)) 78%, var(--vscode-editor-background) 22%);
+}
+
+.toolbar {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.toolbar-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.toolbar-label {
+  font-size: 12px;
+  opacity: 0.78;
+}
+
+.cards {
+  display: grid;
+  gap: 12px;
+}
+
+.card {
+  border: 1px solid var(--vscode-panel-border);
+  border-left-width: 4px;
+  border-radius: 10px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--vscode-editor-background) 90%, var(--vscode-editor-foreground) 10%);
+}
+
+.card.critical {
+  border-left-color: #ff6b6b;
+}
+
+.card.warning {
+  border-left-color: #f4d35e;
+}
+
+.card.info {
+  border-left-color: #4cc2ff;
+}
+
+.card-top,
+.card-meta,
+.card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.card-top {
+  justify-content: space-between;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 14px;
+}
+
+.card-text,
+.card-action-text {
+  margin: 10px 0 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.92;
+}
+
+.card-action-text {
+  opacity: 0.86;
+}
+
+.file {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  border: 1px solid var(--vscode-panel-border);
+}
+
+.badge.group-forgotten {
+  background: color-mix(in srgb, #ffcc66 18%, transparent);
+}
+
+.badge.group-looseEnd {
+  background: color-mix(in srgb, #ff8fab 18%, transparent);
+}
+
+.open-btn {
+  margin-top: 10px;
+  border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
+  background: var(--vscode-button-background, color-mix(in srgb, var(--vscode-editor-background) 82%, var(--vscode-editor-foreground) 18%));
+  color: var(--vscode-button-foreground, var(--vscode-editor-foreground));
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.open-btn:hover {
+  background: var(--vscode-button-hoverBackground, color-mix(in srgb, var(--vscode-editor-background) 72%, var(--vscode-editor-foreground) 28%));
+}
+
+.status-btn {
+  border: 1px solid var(--vscode-panel-border);
+  background: transparent;
+  color: inherit;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.status-btn.active {
+  border-color: var(--vscode-focusBorder);
+  background: color-mix(in srgb, var(--vscode-focusBorder) 18%, transparent);
+}
+
+.empty {
+  padding: 18px 14px;
+  border: 1px dashed var(--vscode-panel-border);
+  border-radius: 10px;
+  font-size: 13px;
+  opacity: 0.75;
+}

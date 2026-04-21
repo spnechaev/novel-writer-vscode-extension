@@ -1,4 +1,4 @@
-import { AnalysisSignal, AnalysisSignalKind, AnalysisSignalStatus, EditorialPass } from "../../types";
+import { AnalysisSignal, AnalysisSignalKind, AnalysisSignalStatus, EditorialPass } from "../../analysis/domain/types/analysisTypes";
 import { SignalCard } from "./analysisViewTypes";
 
 export function normalizeSignalCard(signal: Partial<AnalysisSignal>): SignalCard {
